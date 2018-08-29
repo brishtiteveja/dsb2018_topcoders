@@ -10,6 +10,8 @@ def make_model(network, input_shape):
         return resnet101_fpn(input_shape, channels=2, activation="sigmoid")
     elif network == 'resnet50_2':
         return resnet50_fpn(input_shape, channels=2, activation="sigmoid")
+    elif network == 'resnet50_3':
+        return resnet50_fpn(input_shape, channels=3, activation="sigmoid")
     elif network == 'resnetv2':
         return inception_resnet_v2_fpn(input_shape, channels=2, activation="sigmoid")
     elif network == 'resnetv2_3':

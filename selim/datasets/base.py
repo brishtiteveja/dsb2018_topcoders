@@ -9,6 +9,8 @@ import numpy as np
 from keras.applications import imagenet_utils
 from keras.preprocessing.image import Iterator, load_img, img_to_array
 
+from skimage.transform import resize
+
 from params import args
 
 
@@ -58,6 +60,48 @@ class BaseMaskDatasetIterator(Iterator):
         return batch_y
 
     def _get_batches_of_transformed_samples(self, index_array):
+        batch_x = []
+        batch_y = []
+
+        for batch_index, image_index in enumerate(index_array):
+             # read image file
+             img_id = self.image_ids[image_index] 
+             img_path = os.path.join(self.images_dir, '{0}.png'.format(img_id))
+             image = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
+             image = cv2.normalize(image, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+
+             # read mask file 
+             mask = cv2.imread(os.path.join(self.masks_dir, '{0}.png'.format(img_id)), cv2.IMREAD_UNCHANGED)
+                
+             #crop_mask, crop_image, crop_label = self.augment_and_crop_mask_image(mask, image, label, id, self.crop_shape)
+             # will have to check what this transformation does
+             #mask = self.transform_mask(mask, image)
+
+             # random transform
+             if args.allow_transformation:
+                data = self.random_transformer(image=np.array(image, "uint8"), mask=np.array(mask, "uint8"))
+                image = data['image']
+                mask = data['mask'] 
+
+             # resize for DL models
+             image = resize(image, (args.img_size_target, args.img_size_target, args.img_channel), mode='constant', preserve_range=True)
+             #image = image.reshape(-1, args.img_size_target, args.img_size_target, args.img_channel)
+
+
+             mask = resize(mask, (args.img_size_target, args.img_size_target, args.img_channel), mode='constant', preserve_range=True)
+             #mask = mask.reshape(-1, args.img_size_target, args.img_size_target, args.img_channel)
+
+             batch_x.append(image)
+             batch_y.append(mask)
+
+        batch_x = np.array(batch_x, dtype="float32")
+        batch_y = np.array(batch_y, dtype="float32")
+        if self.preprocessing_function:
+            batch_x = imagenet_utils.preprocess_input(batch_x, mode=self.preprocessing_function)
+
+        return self.transform_batch_x(batch_x), self.transform_batch_y(batch_y)
+
+    def _get_batches_of_transformed_samples_for_dsb(self, index_array):
         batch_x = []
         batch_y = []
 

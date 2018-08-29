@@ -1,5 +1,6 @@
 import gc
 import cv2
+from time import strftime, gmtime
 cv2.setNumThreads(0)
 cv2.ocl.setUseOpenCL(False)
 import os
@@ -33,7 +34,7 @@ class ModelCheckpointMGPU(ModelCheckpoint):
         self.model = self.original_model
         super().on_epoch_end(epoch, logs)
 
-gpus = [x.name for x in K.device_lib.list_local_devices() if x.name[:4] == '/gpu']
+gpus = [x.name for x in K.device_lib.list_local_devices() if x.name[7:11] == '/GPU']
 
 def freeze_model(model, freeze_before_layer):
     if freeze_before_layer == "ALL":
@@ -56,10 +57,13 @@ def main():
     for fold in folds:
         channels = 3
         if args.multi_gpu:
+            print('Using multiple gpu')
             with K.tf.device("/cpu:0"):
-                model = make_model(args.network, (None, None, 3))
+                model = make_model(args.network, (None, None, channels))
         else:
             model = make_model(args.network, (None, None, channels))
+
+        model.summary()
         if args.weights is None:
             print('No weights passed, training from scratch')
         else:
@@ -81,7 +85,8 @@ def main():
         random_transform = aug_mega_hardcore()
         train_generator = dataset.train_generator((args.crop_size, args.crop_size), args.preprocessing_function, random_transform, batch_size=args.batch_size)
         val_generator = dataset.val_generator(args.preprocessing_function, batch_size=1)
-        best_model_file = '{}/best_{}{}_fold{}.h5'.format(args.models_dir, args.alias, args.network,fold)
+        cur_time = strftime("%Y-%m-%d %H:%M:%S", gmtime()) 
+        best_model_file = '{}/best_{}{}_{}.h5'.format(args.models_dir, args.alias, args.network,cur_time)
 
         best_model = ModelCheckpointMGPU(model, filepath=best_model_file, monitor='val_loss',
                                      verbose=1,
@@ -89,7 +94,7 @@ def main():
                                      period=args.save_period,
                                      save_best_only=True,
                                      save_weights_only=True)
-        last_model_file = '{}/last_{}{}_fold{}.h5'.format(args.models_dir, args.alias, args.network,fold)
+        last_model_file = '{}/last_{}{}_{}.h5'.format(args.models_dir, args.alias, args.network,cur_time)
 
         last_model = ModelCheckpointMGPU(model, filepath=last_model_file, monitor='val_loss',
                                      verbose=1,
@@ -97,6 +102,7 @@ def main():
                                      period=args.save_period,
                                      save_best_only=False,
                                      save_weights_only=True)
+
         if args.multi_gpu:
             model = multi_gpu_model(model, len(gpus))
         model.compile(loss=make_loss(args.loss_function),

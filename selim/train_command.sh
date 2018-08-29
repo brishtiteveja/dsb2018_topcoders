@@ -1,0 +1,14 @@
+python train.py  \
+--gpu 1  \
+--num_workers 8  \
+--network resnet50_3 \
+--freeze_till_layer input_1  \
+--loss double_head_loss \
+--optimizer adam  \
+--learning_rate 0.0001  \
+--decay 0.0001  \
+--batch_size 64  \
+--crop_size 128 \
+--steps_per_epoch 10 \
+--epochs 2 \
+--preprocessing_function caffe 

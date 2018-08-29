@@ -6,6 +6,9 @@ import pandas as pd
 from skimage import measure
 from skimage.filters import median
 from skimage.morphology import dilation, watershed, square, erosion
+from skimage.transform import resize
+from sklearn.model_selection import train_test_split
+
 from tqdm import tqdm
 
 from datasets.base import BaseMaskDatasetIterator
@@ -58,6 +61,18 @@ class DSB2018BinaryDataset:
         return self.get_generator(self.val_ids, None, preprocessing_function, None, batch_size, False)
 
     def generate_ids(self):
+        train_df = pd.read_csv(args.depth_coverage_file) 
+
+        train_ids, val_ids, cov_train, cov_test, depth_train, depth_test = train_test_split(
+                        train_df.id, train_df.coverage, train_df.z,
+                        test_size=0.25, stratify=train_df.coverage_class, random_state=1337)
+
+        train_ids = np.asarray(train_ids)
+        val_ids = np.asarray(val_ids)
+
+        return train_ids, val_ids
+
+    def generate_ids_for_dsb(self):
         df = pd.read_csv(args.folds_csv)
         polosa_id = '193ffaa5272d5c421ae02130a64d98ad120ec70e4ed97a72cdcd4801ce93b066'
         galaxy_ids = ['538b7673d507014d83af238876e03617396b70fe27f525f8205a4a96900fbb8e',
@@ -87,8 +102,32 @@ class DSB2018BinaryDataset:
 
 
 class DSB2018BinaryDatasetIterator(BaseMaskDatasetIterator):
-
     def __init__(self, images_dir, masks_dir, labels_dir, image_ids, crop_shape, preprocessing_function, random_transformer=None, batch_size=8, shuffle=True,
+                 image_name_template=None, mask_template=None, label_template=None, padding=32, seed=None):
+        if random_transformer:
+            self.all_good4copy = {}
+
+            for i in tqdm(range(len(image_ids))):
+                img_id = image_ids[i] 
+                img_path = os.path.join(images_dir, '{0}.png'.format(img_id))
+                img = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
+                img = cv2.normalize(img, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+                img = resize(img, (args.img_size_target, args.img_size_target, args.img_channel), mode='constant', preserve_range=True)
+                img = img.reshape(-1, args.img_size_target, args.img_size_target, args.img_channel)
+
+
+                msk = cv2.imread(os.path.join(masks_dir, '{0}.png'.format(img_id)), cv2.IMREAD_UNCHANGED)
+                msk = resize(msk, (args.img_size_target, args.img_size_target, args.img_channel), mode='constant', preserve_range=True)
+                msk = msk.reshape(-1, args.img_size_target, args.img_size_target, args.img_channel)
+
+                good4copy = img
+
+                self.all_good4copy[img_id] = good4copy
+                
+        super().__init__(images_dir, masks_dir, labels_dir, image_ids, crop_shape, preprocessing_function, random_transformer, batch_size, shuffle, image_name_template,
+                         mask_template, label_template, padding, seed, grayscale_mask=False)
+
+    def __init__for_dsb(self, images_dir, masks_dir, labels_dir, image_ids, crop_shape, preprocessing_function, random_transformer=None, batch_size=8, shuffle=True,
                  image_name_template=None, mask_template=None, label_template=None, padding=32, seed=None):
         if random_transformer:
             self.all_good4copy = {}
@@ -124,6 +163,10 @@ class DSB2018BinaryDatasetIterator(BaseMaskDatasetIterator):
         return self.copy_cells(mask, image, label, img_id, crop_shape)
 
     def copy_cells(self, mask, image, label, img_id, input_shape):
+        print('No copying')
+        return
+
+    def copy_cells_for_dsb(self, mask, image, label, img_id, input_shape):
         img0 = image.copy()
         msk0 = mask.copy()
         lbl0 = label.copy()
